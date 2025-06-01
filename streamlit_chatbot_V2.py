@@ -73,7 +73,6 @@ def get_text(elem, path, ns):
     sub = elem.find(path, ns)
     return sub.text if sub is not None and sub.text is not None else ''
 
-
 def stop_place_lookup(ort_name: str):
     """
     Sucht eine Haltestelle via OJP. Gibt Liste von (stop_id, stop_name) oder None zurück.
@@ -191,7 +190,6 @@ def parse_trips(xml_text: str):
 
     return build_steps(best_trip), [build_steps(t) for t in alts]
 
-
 # ------------------------- 6) Session-State initialisieren -------------------------
 if "messages" not in st.session_state:
     st.session_state.messages = [
@@ -200,10 +198,11 @@ if "messages" not in st.session_state:
             "content": (
                 "Du bist ein freundlicher und hilfsbereiter Mobilitäts-Chatbot. "
                 "Du planst für den Nutzer eine Reise mit dem öffentlichen Verkehr in der Schweiz. "
-                "Dein Ziel ist es, die Informationen zur Reiseplanung vom Nutzer zu sammeln: Startort, Zielort, Datum und Uhrzeit. "
+                "Dein Ziel ist es, die Informationen zur Reiseplanung vom Nutzer zu sammeln: Startort, Zielort, Datum, Uhrzeit "
+                "und ob es sich um eine Abfahrts- oder Ankunftszeit handelt. "
                 "Führe einen natürlichen und lockeren Dialog per Du. Stelle gezielte Rückfragen, wenn etwas fehlt. "
                 "Sobald du alle Infos hast, gib **ausschließlich** ein JSON-Objekt aus:\n"
-                "{\"start\":\"…\", \"ziel\":\"…\", \"datum\":\"YYYY-MM-DD\", \"uhrzeit\":\"HH:MM:SS\"}\n"
+                "{\"start\":\"…\", \"ziel\":\"…\", \"datum\":\"YYYY-MM-DD\", \"uhrzeit\":\"HH:MM:SS\", \"typ\":\"abfahrt\"}\n"
                 "Nachdem die Verbindungen angezeigt wurden, frage den Nutzer, ob alles klar ist, "
                 "ob er die Reise durchführt und welche Verbindung er wählen wird. "
                 "Wünsche ihm eine gute Reise!"
@@ -211,7 +210,7 @@ if "messages" not in st.session_state:
         },
         {
             "role": "assistant",
-            "content": "Wohin möchtest du reisen und wann?"
+            "content": "Wohin möchtest du reisen und wann (Abfahrt oder Ankunft)?"
         }
     ]
     st.session_state.reiseinfos = None        # Wird gesetzt, sobald JSON erkannt wurde
@@ -223,7 +222,7 @@ if "messages" not in st.session_state:
 # ------------------------- 7) UI oben: Titel & Erklärung -------------------------
 st.set_page_config(page_title="🚆 ÖV-Chatbot Schweiz", layout="wide")
 st.title("🚆 ÖV-Chatbot Schweiz")
-st.write("Stelle z. B. eine Frage wie „Ich möchte von Zürich nach Bern morgen um 15 Uhr fahren.“")
+st.write("Stelle z. B. eine Frage wie „Ich möchte von Zürich nach Bern morgen um 15 Uhr ankommen.“")
 st.write("---")
 
 # ===============================================================
@@ -279,8 +278,7 @@ if st.session_state.stage in ["chat", "done"]:
             })
 
         # Nach Verarbeitung neu ausgeben
-        st.experimental_rerun = False  # Entferne experimentelles Rerun-Flag, da kein erneutes Rerun notwendig
-        # Die Seite wird beim nächsten Streamlit-Refresh automatisch neu gerendert
+        # (Streamlit aktualisiert automatisch)
 
 # ===============================================================
 #  >>> STAGE: stop_lookup <<<
@@ -335,7 +333,6 @@ if st.session_state.stage == "stop_lookup":
         st.session_state.reiseinfos["ziel_id"]    = ziel_map[chosen_ziel_name]
         st.session_state.reiseinfos["ziel_name"]  = chosen_ziel_name
         st.session_state.stage = "trip"
-        # Kein explizites Rerun nötig
 
 # ===============================================================
 #  >>> STAGE: trip <<<
@@ -343,15 +340,23 @@ if st.session_state.stage == "stop_lookup":
 if st.session_state.stage == "trip":
     info = st.session_state.reiseinfos
 
-    datum = info["datum"]
-    uhrzeit = info["uhrzeit"]
-    start_id = info["start_id"]
+    datum      = info["datum"]
+    uhrzeit    = info["uhrzeit"]
+    start_id   = info["start_id"]
     start_name = info["start_name"]
-    ziel_id = info["ziel_id"]
-    ziel_name = info["ziel_name"]
+    ziel_id    = info["ziel_id"]
+    ziel_name  = info["ziel_name"]
+
+    # Neuer Teil: Suchtyp aus reiseinfos (abfahrt oder ankunft)
+    typ = info.get("typ", "abfahrt")
+    if typ not in ("abfahrt", "ankunft"):
+        typ = "abfahrt"
 
     now_utc = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
-    xml_body = f"""<?xml version="1.0" encoding="UTF-8"?>
+
+    if typ == "abfahrt":
+        # Abfahrtsorientierte Suche: DepArrTime bei Origin
+        xml_body = f"""<?xml version="1.0" encoding="UTF-8"?>
 <OJP xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
      xmlns:xsd="http://www.w3.org/2001/XMLSchema"
      xmlns="http://www.siri.org.uk/siri"
@@ -380,6 +385,48 @@ if st.session_state.stage == "trip":
               <ojp:Text>{ziel_name}</ojp:Text>
             </ojp:LocationName>
           </ojp:PlaceRef>
+          <!-- kein DepArrTime beim Reiseziel, da abfahrtsorientiert -->
+        </ojp:Destination>
+        <ojp:Params>
+          <ojp:NumberOfResults>5</ojp:NumberOfResults>
+          <ojp:OptimisationMethod>fastest</ojp:OptimisationMethod>
+        </ojp:Params>
+      </ojp:OJPTripRequest>
+    </ServiceRequest>
+  </OJPRequest>
+</OJP>
+"""
+    else:
+        # Ankunftsorientierte Suche: DepArrTime bei Destination
+        xml_body = f"""<?xml version="1.0" encoding="UTF-8"?>
+<OJP xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+     xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+     xmlns="http://www.siri.org.uk/siri"
+     xmlns:ojp="http://www.vdv.de/ojp"
+     version="1.0"
+     xsi:schemaLocation="http://www.siri.org.uk/siri ../ojp-xsd-v1.0/OJP.xsd">
+  <OJPRequest>
+    <ServiceRequest>
+      <RequestTimestamp>{now_utc}</RequestTimestamp>
+      <RequestorRef>StreamlitApp</RequestorRef>
+      <ojp:OJPTripRequest>
+        <RequestTimestamp>{now_utc}</RequestTimestamp>
+        <ojp:Origin>
+          <ojp:PlaceRef>
+            <ojp:StopPlaceRef>{start_id}</ojp:StopPlaceRef>
+            <ojp:LocationName>
+              <ojp:Text>{start_name}</ojp:Text>
+            </ojp:LocationName>
+          </ojp:PlaceRef>
+          <!-- kein DepArrTime bei Origin, da ankunftsorientiert -->
+        </ojp:Origin>
+        <ojp:Destination>
+          <ojp:PlaceRef>
+            <ojp:StopPlaceRef>{ziel_id}</ojp:StopPlaceRef>
+            <ojp:LocationName>
+              <ojp:Text>{ziel_name}</ojp:Text>
+            </ojp:LocationName>
+          </ojp:PlaceRef>
           <ojp:DepArrTime>{datum}T{uhrzeit}Z</ojp:DepArrTime>
         </ojp:Destination>
         <ojp:Params>
@@ -389,7 +436,8 @@ if st.session_state.stage == "trip":
       </ojp:OJPTripRequest>
     </ServiceRequest>
   </OJPRequest>
-</OJP>"""
+</OJP>
+"""
 
     headers = {
         "Content-Type": "application/xml",
@@ -415,8 +463,9 @@ if st.session_state.stage == "trip":
 
     # Bot-Ausgabe im Chat
     st.session_state.messages.append({"role": "assistant", "content": "Hier sind die Verbindungen:"})
-    # Anzeige: Schnellste Verbindung
     st.chat_message("assistant").write("Hier sind die Verbindungen:")
+
+    # Anzeige: Schnellste Verbindung
     st.markdown("### 🚀 Schnellste Verbindung")
     for i, s in enumerate(best, start=1):
         if s['type'] == 'ride':
