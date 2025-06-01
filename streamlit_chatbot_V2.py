@@ -221,6 +221,8 @@ st.write("---")
 #  >>> CHAT-HISTORIE ANZEIGEN <<<
 # ===============================================================
 for msg in st.session_state.messages:
+    if msg["role"] == "system":
+        continue  # Systemnachricht nicht anzeigen
     if msg["role"] == "assistant":
         st.chat_message("assistant").write(msg["content"])
     else:
