@@ -205,12 +205,12 @@ if "messages" not in st.session_state:
                 "{\"start\":\"…\", \"ziel\":\"…\", \"datum\":\"YYYY-MM-DD\", \"uhrzeit\":\"HH:MM:SS\", \"typ\":\"abfahrt\"}\n"
                 "Nachdem die Verbindungen angezeigt wurden, frage den Nutzer, ob alles klar ist, "
                 "ob er die Reise durchführt und welche Verbindung er wählen wird. "
-                "Wünsche ihm eine gute Reise!"
+                "Wünsche ihm eine gute Reise! Sei kreativ und überraschend den Nutzer mit deiner Antwort. "
             )
         },
         {
             "role": "assistant",
-            "content": "Wohin möchtest du reisen und wann (Abfahrt oder Ankunft)?"
+            "content": "Wohin möchtest du reisen und wann?"
         }
     ]
     st.session_state.reiseinfos = None        # Wird gesetzt, sobald JSON erkannt wurde
