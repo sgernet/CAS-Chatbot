@@ -65,6 +65,15 @@ def replace_date_keywords(text: str) -> str:
 
     return pattern.sub(repl, text)
 
+def get_text(elem, path, ns):
+    """
+    Sucht ein Element mit Pfad `path` im Element `elem` unter Verwendung der Namensräume `ns`.
+    Gibt den Textinhalt zurück oder einen leeren String, wenn nichts gefunden wird.
+    """
+    sub = elem.find(path, ns)
+    return sub.text if sub is not None and sub.text is not None else ''
+
+
 def stop_place_lookup(ort_name: str):
     """
     Sucht eine Haltestelle via OJP. Gibt Liste von (stop_id, stop_name) oder None zurück.
@@ -163,10 +172,10 @@ def parse_trips(xml_text: str):
                     'line':     service.find('.//ojp:PublishedLineName/ojp:Text', ns).text,
                     'dep_sta':  board.find('.//ojp:StopPointName/ojp:Text', ns).text,
                     'dep_time': board.find('.//ojp:TimetabledTime', ns).text.split('T')[-1].rstrip('Z'),
-                    'dep_quay': board.find('ojp:PlannedQuay/ojp:Text', ns).text or '–',
+                    'dep_quay': get_text(board, 'ojp:PlannedQuay/ojp:Text', ns) or '–',
                     'arr_sta':  alight.find('.//ojp:StopPointName/ojp:Text', ns).text,
                     'arr_time': alight.find('.//ojp:TimetabledTime', ns).text.split('T')[-1].rstrip('Z'),
-                    'arr_quay': alight.find('ojp:PlannedQuay/ojp:Text', ns).text or '–'
+                    'arr_quay': get_text(board, 'ojp:PlannedQuay/ojp:Text', ns) or '–',
                 })
             else:
                 trf = leg.find('ojp:TransferLeg', ns)
