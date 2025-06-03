@@ -255,7 +255,7 @@ if st.session_state.stage in ["chat", "done"]:
         # 3) GPT-4 aufrufen (nur in Stage "chat"; in Stage "done" antwortet Bot direkt)
         if st.session_state.stage == "chat":
             response = openai.chat.completions.create(
-                model="gpt-4",
+                model="gpt-4o",
                 messages=st.session_state.messages
             )
             reply = response.choices[0].message.content.strip()

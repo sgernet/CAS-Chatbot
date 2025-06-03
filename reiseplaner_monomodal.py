@@ -110,7 +110,7 @@ while True:
 
     # 2) Anfrage an OpenAI
     antwort = client.chat.completions.create(
-        model="gpt-4",
+        model="gpt-4o",
         messages=messages
     )
     reply = antwort.choices[0].message.content.strip()
@@ -507,7 +507,7 @@ if __name__ == '__main__':
 
 #Anfrage an OpenAI
 antwort = client.chat.completions.create(
-    model="gpt-4",
+    model="gpt-4o",
     messages=messages
 )
 reply = antwort.choices[0].message.content.strip()
@@ -522,7 +522,7 @@ while True:
     messages.append({"role": "user", "content": user_input})
 
     antwort = client.chat.completions.create(
-        model="gpt-4",
+        model="gpt-4o",
         messages=messages
     )
     bot_reply = antwort.choices[0].message.content.strip()

@@ -49,7 +49,7 @@ def zeige_streamlit_chatbot():
 
             if st.session_state.stage == "chat":
                 response = openai.chat.completions.create(
-                    model="gpt-4",
+                    model="gpt-4o",
                     messages=st.session_state.messages
                 )
                 reply = response.choices[0].message.content.strip()
