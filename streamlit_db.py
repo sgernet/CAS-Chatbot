@@ -1,5 +1,9 @@
 import streamlit as st
 
+# Inhalt von streamlit_db.py
+def zeige_streamlit_db():
+    print("Nutzerprofil anlegen")
+
 st.title("📝 Nutzerprofil anlegen")
 
 with st.form("profil_formular"):
