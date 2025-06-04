@@ -515,6 +515,7 @@ if st.session_state.stage == "trip":
             "role": "assistant",
             "content": "Alles klar, danke für deine Rückmeldung! Ich wünsche dir eine gute Reise 🚆🙂"
         })
+        st.rerun()
 
 # ===============================================================
 #  >>> STAGE: done <<<
