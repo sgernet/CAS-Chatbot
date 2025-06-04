@@ -346,6 +346,9 @@ if st.session_state.stage == "stop_lookup":
         st.session_state.stage = "trip"
         st.rerun()
 
+# … dein Code bis einschließlich „trip“-Block unverändert …
+
+
 # ===============================================================
 #  >>> STAGE: trip <<<
 # ===============================================================
@@ -466,7 +469,10 @@ if st.session_state.stage == "trip":
     st.session_state.steps_best = best
     st.session_state.steps_alts = alts
 
-    # Ausgabe der Verbindungen + Frage
+    # ——————————————————————————————————————————————————————————————
+    # Ausgabe der Verbindungen + Frage (einmalig):
+    # ——————————————————————————————————————————————————————————————
+
     st.session_state.messages.append({"role": "assistant", "content": "Hier sind die Verbindungen:"})
     st.chat_message("assistant").write("Hier sind die Verbindungen:")
 
@@ -510,16 +516,56 @@ if st.session_state.stage == "trip":
     user_choice = st.chat_input("🧳 Deine Antwort:")
     if user_choice:
         st.session_state.messages.append({"role": "user", "content": user_choice})
+        # Wenn der Nutzer hier antwortet, merken wir uns die Wahl und schalten erst danach auf "done"
         st.session_state.stage = "done"
+        # Die Abschlussnachricht hängt der Bot direkt an:
         st.session_state.messages.append({
             "role": "assistant",
             "content": "Alles klar, danke für deine Rückmeldung! Ich wünsche dir eine gute Reise 🚆🙂"
         })
+        # Jetzt rerunen, damit wir ins "done"-Branch springen:
         st.rerun()
+
 
 # ===============================================================
 #  >>> STAGE: done <<<
 # ===============================================================
 if st.session_state.stage == "done":
-    # Hier passiert nichts mehr, weil der Abschluss im „trip“-Block bereits angehängt wurde.
-    pass
+    # 1) Zuerst zeigen wir hier die Verbindungen erneut, damit sie auch nach dem Rerun sichtbar bleiben:
+    best = st.session_state.steps_best or []
+    alts = st.session_state.steps_alts or []
+
+    st.markdown("### 🚀 Schnellste Verbindung")
+    for i, s in enumerate(best, start=1):
+        if s['type'] == 'ride':
+            st.write(
+                f"{i}. 🚆 **{s['line']}**: {s['dep_sta']} ({s['dep_time']} Uhr, Gleis {s['dep_quay']}) → "
+                f"{s['arr_sta']} ({s['arr_time']} Uhr, Gleis {s['arr_quay']})"
+            )
+        else:
+            st.write(
+                f"{i}. 🚶 **{s['mode'].capitalize()}** von {s['from']} nach {s['to']} "
+                f"(Dauer {s['duration']})"
+            )
+
+    if alts:
+        st.markdown("### 🔄 Alternative Verbindungen")
+        for idx, alt in enumerate(alts, start=1):
+            st.markdown(f"**Alternative {idx}:**")
+            for j, s in enumerate(alt, start=1):
+                if s['type'] == 'ride':
+                    st.write(
+                        f"{j}. 🚆 **{s['line']}**: {s['dep_sta']} ({s['dep_time']} Uhr, Gleis {s['dep_quay']}) → "
+                        f"{s['arr_sta']} ({s['arr_time']} Uhr, Gleis {s['arr_quay']})"
+                    )
+                else:
+                    st.write(
+                        f"{j}. 🚶 **{s['mode'].capitalize()}** von {s['from']} nach {s['to']} "
+                        f"(Dauer {s['duration']})"
+                    )
+    else:
+        st.info("Keine Alternativen verfügbar.")
+
+
+
+
