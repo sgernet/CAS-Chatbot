@@ -470,6 +470,15 @@ if st.session_state.stage == "trip":
     st.session_state.steps_best = best
     st.session_state.steps_alts = alts
 
+    # ───────────────────────────────────────────────────────────────────
+    # Neu: XML-Antwort im Session-State speichern
+    st.session_state.xml_response = response.text
+    # ───────────────────────────────────────────────────────────────────
+
+    best, alts = parse_trips(response.text)
+    st.session_state.steps_best = best
+    st.session_state.steps_alts = alts
+
     # ——————————————————————————————————————————————————————————————
     # Ausgabe der Verbindungen + Frage (einmalig):
     # ——————————————————————————————————————————————————————————————
@@ -573,9 +582,5 @@ if st.session_state.stage == "done":
     # ----------------------------------------------
     st.markdown("---")
     st.markdown("## Karte zum Reiseweg")
-    show_reiseweg()
-
-
-
-
+    show_reiseweg(st.session_state.xml_response)
 
