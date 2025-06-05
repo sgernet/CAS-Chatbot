@@ -10,6 +10,7 @@ from datetime import datetime, timedelta, timezone
 
 import streamlit as st
 import openai
+from streamlit_karte import show_reiseweg   
 
 # ------------------------- 1) API-Keys aus secrets laden -------------------------
 OPENAI_API_KEY = st.secrets.get("OPENAI_API_KEY")
@@ -534,6 +535,7 @@ if st.session_state.stage == "done":
     # 1) Zuerst zeigen wir hier die Verbindungen erneut, damit sie auch nach dem Rerun sichtbar bleiben:
     best = st.session_state.steps_best or []
     alts = st.session_state.steps_alts or []
+    
 
     st.markdown("### 🚀 Schnellste Verbindung")
     for i, s in enumerate(best, start=1):
@@ -565,6 +567,14 @@ if st.session_state.stage == "done":
                     )
     else:
         st.info("Keine Alternativen verfügbar.")
+
+    # ----------------------------------------------
+    # Ganz am Schluss: Karte mit dem Reiseweg anzeigen
+    # ----------------------------------------------
+    st.markdown("---")
+    st.markdown("## Karte zum Reiseweg")
+    show_reiseweg()
+
 
 
 
