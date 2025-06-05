@@ -14,15 +14,20 @@ namespaces = {
     "ojp": "http://www.vdv.de/ojp"
 }
 
-@st.cache_data
 def parse_xml_and_extract_path(xml_path):
     """
     Liest die XML-Datei ein, parst sie und extrahiert die Sequenz von StopPoint-Referenzen
     sowie deren Koordinaten. Gibt eine Liste von [lon, lat] zurück, die den Routenverlauf bilden.
     """
-    tree = ET.parse(xml_path)
+    try:
+        tree = ET.parse(xml_path)
+    except (FileNotFoundError, ET.ParseError) as e:
+        st.error(f"Fehler beim Einlesen von '{xml_path}': {e}")
+        return []
+
     root = tree.getroot()
 
+    # 1) Alle <ojp:Location> mit <ojp:StopPoint> sammeln → Mapping StopPointRef → (lon, lat)
     stoppoint_to_coords = {}
     for loc in root.findall(".//ojp:Location", namespaces):
         sp = loc.find("ojp:StopPoint", namespaces)
@@ -35,10 +40,14 @@ def parse_xml_and_extract_path(xml_path):
                     lon_elem = geo.find("siri:Longitude", namespaces)
                     lat_elem = geo.find("siri:Latitude", namespaces)
                     if lon_elem is not None and lat_elem is not None:
-                        lon = float(lon_elem.text)
-                        lat = float(lat_elem.text)
-                        stoppoint_to_coords[sp_ref] = (lon, lat)
+                        try:
+                            lon = float(lon_elem.text)
+                            lat = float(lat_elem.text)
+                            stoppoint_to_coords[sp_ref] = (lon, lat)
+                        except ValueError:
+                            pass  # Ungültige Koordinaten ignorieren
 
+    # 2) Erstes <ojp:TripResult> auswählen
     first_trip = root.find(".//ojp:TripResult", namespaces)
     if first_trip is None:
         return []
@@ -47,8 +56,10 @@ def parse_xml_and_extract_path(xml_path):
     if trip is None:
         return []
 
+    # 3) StopPointRefs in Reihenfolge der TripLegs sammeln
     sequence_of_refs = []
     for leg in trip.findall("ojp:TripLeg", namespaces):
+        # TimedLeg → Boarding + Alighting
         timed = leg.find("ojp:TimedLeg", namespaces)
         if timed is not None:
             board_ref_elem = timed.find("ojp:LegBoard/siri:StopPointRef", namespaces)
@@ -58,6 +69,7 @@ def parse_xml_and_extract_path(xml_path):
             if alight_ref_elem is not None:
                 sequence_of_refs.append(alight_ref_elem.text.strip())
 
+        # TransferLeg → Fußweg Start + Ende
         transfer = leg.find("ojp:TransferLeg", namespaces)
         if transfer is not None:
             start_ref_elem = transfer.find("ojp:LegStart/siri:StopPointRef", namespaces)
@@ -67,12 +79,14 @@ def parse_xml_and_extract_path(xml_path):
             if end_ref_elem is not None:
                 sequence_of_refs.append(end_ref_elem.text.strip())
 
+    # 4) Referenzen → Koordinatenliste
     path_coords = []
     for ref in sequence_of_refs:
         coords = stoppoint_to_coords.get(ref)
         if coords:
             path_coords.append([coords[0], coords[1]])
 
+    # 5) Doppelte Punkte (hintereinander) entfernen
     deduped = []
     prev = None
     for pt in path_coords:
@@ -90,7 +104,7 @@ def show_reiseweg():
     path = parse_xml_and_extract_path(XML_FILE)
 
     if not path:
-        st.error("Keine Route/Koordinaten gefunden. Bitte überprüfen Sie die XML-Datei.")
+        st.error("Keine Route/Koordinaten gefunden. Die Karte bleibt leer.")
         return
 
     # Min/Max für Bounding-Box
@@ -103,31 +117,38 @@ def show_reiseweg():
     center_lon = (lon_min + lon_max) / 2
     center_lat = (lat_min + lat_max) / 2
 
-    # Zoom-Level approximativ berechnen
+    # Zoom-Level approximativ berechnen, um die gesamte Strecke sehen zu können
     lon_span = lon_max - lon_min
     lat_span = lat_max - lat_min
 
     if lon_span == 0 or lat_span == 0:
-        zoom_level = 14
+        # Wenn Start und Ziel fast gleich sind oder die Differenz sehr gering ist, 
+        # nehmen wir einen moderaten Zoom.
+        zoom_level = 12
     else:
+        # Diese Formeln berechnen ungefähr, wie weit man herauszoomen muss,
+        # damit die gesamte Breite (lon_span) bzw. Höhe (lat_span) in den View passt.
         zoom_lon = math.log2(360.0 / lon_span)
         zoom_lat = math.log2(180.0 / lat_span)
+        # Wir nehmen den kleineren Wert von beiden, um sicherzugehen, dass sowohl 
+        # Breite als auch Höhe passen, und ziehen 1 Level ab, um einen kleinen Puffer zu haben.
         zoom_level = min(zoom_lon, zoom_lat) - 1
-        zoom_level = max(0, min(zoom_level, 20))
+        # Damit wir nicht zu weit herauszoomen (ganze Schweiz), aber auch nicht zu nah rein:
+        zoom_level = max(5, min(zoom_level, 14))
 
     # PathLayer: dicke, rote Linie
     path_layer = pdk.Layer(
         "PathLayer",
         data=[{"path": path}],
         get_path="path",
-        get_width=16,
-        get_color=[220, 20, 60],  # Carmine-Red
+        get_width=300,                 # Breite 300 px bei angemessenem Zoom
+        get_color=[220, 20, 60],     # Carmine-Red
         opacity=1.0,
     )
 
-    # ScatterplotLayer: Start-/Endpunkt
-    start_point = {"position": path[0], "color": [0, 128, 0], "radius": 100}
-    end_point = {"position": path[-1], "color": [0, 0, 255], "radius": 100}
+    # ScatterplotLayer: Start-/Endpunkt als Pixel-Kreise
+    start_point = {"position": path[0], "color": [0, 128, 0], "radius": 5}   # Grün
+    end_point   = {"position": path[-1], "color": [0, 0, 255], "radius": 5}  # Blau
 
     scatter_layer = pdk.Layer(
         "ScatterplotLayer",
@@ -135,7 +156,8 @@ def show_reiseweg():
         get_position="position",
         get_fill_color="color",
         get_radius="radius",
-        pickable=True,
+        radiusUnits="pixels",  # Pixel statt Meter, damit die Punkte sichtbar bleiben
+        pickable=False,
     )
 
     view_state = pdk.ViewState(
