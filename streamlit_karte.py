@@ -4,6 +4,7 @@ import math
 import xml.etree.ElementTree as ET
 import pydeck as pdk
 import streamlit as st
+import streamlit.components.v1 as components
 
 # Namespaces definieren
 namespaces = {
@@ -179,7 +180,8 @@ def show_reiseweg(xml_text: str = None):
     st.pydeck_chart(deck)
 
 
+
 if __name__ == "__main__":
     # Beispiel: Wenn man streamlit_karte.py direkt ausführt, kann man die Datei 'response.xml' anzeigen lassen
-    st.title("Reiseweg (Standalone)")
+    st.title("Reiseweg")
     show_reiseweg()
