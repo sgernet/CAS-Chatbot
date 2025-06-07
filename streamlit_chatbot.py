@@ -560,11 +560,6 @@ if st.session_state.stage == "trip":
         st.session_state.messages.append({"role": "user", "content": user_choice})
         # Wenn der Nutzer hier antwortet, merken wir uns die Wahl und schalten erst danach auf "done"
         st.session_state.stage = "done"
-        # Die Abschlussnachricht hängt der Bot direkt an:
-        st.session_state.messages.append({
-            "role": "assistant",
-            "content": "Alles klar, danke für deine Rückmeldung! Ich wünsche dir eine gute Reise 🚆🙂"
-        })
         # Jetzt rerunen, damit wir ins "done"-Branch springen:
         st.rerun()
 
@@ -622,3 +617,7 @@ if st.session_state.stage == "done":
     st.markdown("## Karte zum Reiseweg")
     show_reiseweg(st.session_state.xml_response)
 
+     # ← Hier die Abschlussnachricht ganz unten
+    st.chat_message("assistant").write(
+        "Alles klar, danke für deine Rückmeldung! Ich wünsche dir eine gute Reise 🚆🙂"
+    )
