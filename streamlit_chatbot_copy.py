@@ -1,4 +1,4 @@
-# streamlit_chatbot.py
+# streamlit_chatbot_streamlit_ui_v2.py
 
 import os
 import re
