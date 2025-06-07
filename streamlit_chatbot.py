@@ -245,7 +245,8 @@ if "messages" not in st.session_state:
 # ------------------------- 7) UI oben: Titel & Erklärung -------------------------
 st.set_page_config(page_title="🚆 ÖV-Chatbot Schweiz", layout="wide")
 st.title("🚆 ÖV-Chatbot Schweiz")
-st.write("Stelle z. B. eine Frage wie „Ich möchte von Zürich nach Bern morgen um 15 Uhr ankommen.“")
+st.write("Sage mir deinen Reisewunsch und ich suche im Fahrplan die passende Verbindung für dich. ")
+st.write("Bsp.: „Ich möchte morgen um 10 Uhr von Luzern nach Engelberg fahren.“")
 st.write("---")
 
 # ===============================================================
