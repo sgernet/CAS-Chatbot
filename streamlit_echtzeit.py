@@ -3,6 +3,8 @@ import requests
 import xml.etree.ElementTree as ET
 from google.transit import gtfs_realtime_pb2
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
+import re
 import streamlit as st
 
 # ------------------------- 1) API-Keys aus secrets laden -------------------------
@@ -10,11 +12,14 @@ GTFS_RT_API_KEY = st.secrets.get("GTFS_RT_API_KEY")
 OJP_API_KEY    = st.secrets.get("OJP_API_KEY")
 
 if not GTFS_RT_API_KEY:
-    st.error("❌ Bitte lege in .streamlit/secrets.toml GTFS_RT_API_KEY an.")
+    st.error("❌ Bitte lege in .streamlit/secrets.toml GTFS_RT_API_KEY als String an.")
     st.stop()
 if not OJP_API_KEY:
-    st.error("❌ Bitte lege in .streamlit/secrets.toml OJP_API_KEY an.")
+    st.error("❌ Bitte lege in .streamlit/secrets.toml OJP_API_KEY als String an.")
     st.stop()
+
+# Lokale Zeitzone für Anzeige
+LOCAL_TZ = ZoneInfo("Europe/Zurich")
 
 # ------------------------- 2) OJP Stop-Place-Lookup Funktion -------------------------
 def stop_place_lookup(ort_name: str):
@@ -75,13 +80,15 @@ def fetch_gtfs_rt(api_key: str) -> gtfs_realtime_pb2.FeedMessage:
     feed.ParseFromString(resp.content)
     return feed
 
+
 def parse_delays_for_stop(feed: gtfs_realtime_pb2.FeedMessage, stop_id: str):
-    """Extrahiert StopTimeUpdates für eine stop_id und liefert sortierte Liste von Diktaten."""
+    """Extrahiert StopTimeUpdates für eine stop_id und liefert sortierte Liste mit Kopfziel (headsign)."""
     delays = []
     for entity in feed.entity:
         if not entity.HasField('trip_update'):
             continue
         tu = entity.trip_update
+        headsign = getattr(tu.trip, 'trip_headsign', 'unbekannt')
         for stu in tu.stop_time_update:
             if stu.stop_id != stop_id:
                 continue
@@ -93,7 +100,7 @@ def parse_delays_for_stop(feed: gtfs_realtime_pb2.FeedMessage, stop_id: str):
             sched_dt = pred_dt - timedelta(seconds=delay_s)
             delays.append({
                 'route_id': tu.trip.route_id,
-                'trip_id': tu.trip.trip_id,
+                'headsign': headsign,
                 'scheduled': sched_dt,
                 'predicted': pred_dt,
                 'delay_min': delay_s // 60
@@ -104,27 +111,29 @@ def parse_delays_for_stop(feed: gtfs_realtime_pb2.FeedMessage, stop_id: str):
 if 'stage' not in st.session_state:
     st.session_state.stage = 'chat'
     st.session_state.messages = [
-        {'role': 'system', 'content': 'Du bist ein freundlicher Chatbot für ÖV-Verspätungen.'},
-        {'role': 'assistant', 'content': 'Welche Haltestelle möchtest du abfragen?'}
+        {'role': 'assistant', 'content':'Welche Haltestelle möchtest du abfragen?'}
     ]
     st.session_state.stop_id = None
     st.session_state.stop_name = None
 
-st.set_page_config(page_title='🚦 ÖV-Verspätungs-Chatbot', layout='wide')
-st.title('🚦 ÖV-Verspätungs-Chatbot')
+st.set_page_config(page_title='🚦 ÖV-Chatbot für Verspätungen', layout='wide')
+st.title('🚦 ÖV-Chatbot für Verspätungen')
 st.write('Frag mich nach aktuellen Verspätungen an deiner Haltestelle.')
 st.write('---')
-# Chat-Historie
+
+# Chat-Historie (Systemnachrichten ausgeblendet)
 for msg in st.session_state.messages:
+    if msg['role'] == 'system':
+        continue
     st.chat_message(msg['role']).write(msg['content'])
 
 # Stage: chat -> lookup
 if st.session_state.stage == 'chat':
-    user_input = st.chat_input('🧳 Haltestelle (Name oder ID) eingeben:')
+    user_input = st.chat_input('🧳 Haltestelle eingeben:')
     if user_input:
-        st.session_state.messages.append({'role': 'user', 'content': user_input})
+        st.session_state.messages.append({'role':'user','content':user_input})
         st.session_state.stop_name = user_input
-        st.session_state.messages.append({'role': 'assistant', 'content': 'Suche Haltestelle...'})
+        st.session_state.messages.append({'role':'assistant','content':'Suche Haltestelle...'})
         st.session_state.stage = 'lookup'
         st.rerun()
 
@@ -140,13 +149,13 @@ if st.session_state.stage == 'lookup':
     choice = st.selectbox('Haltestelle auswählen', list(stop_map.keys()))
     if st.button('Bestätigen'):
         st.session_state.stop_id = stop_map[choice]
-        st.session_state.messages.append({'role': 'assistant', 'content': f'Du hast {choice} ausgewählt.'})
+        st.session_state.messages.append({'role':'assistant','content':f'Du hast {choice} ausgewählt.'})
         st.session_state.stage = 'delay'
         st.rerun()
 
 # Stage: delay -> fetch & display
 if st.session_state.stage == 'delay':
-    st.session_state.messages.append({'role': 'assistant', 'content': 'Hole Verspätungsdaten...'})
+    st.session_state.messages.append({'role':'assistant','content':'Hole Verspätungsdaten...'})
     st.chat_message('assistant').write('Hole Verspätungsdaten...')
     feed = fetch_gtfs_rt(GTFS_RT_API_KEY)
     delays = parse_delays_for_stop(feed, st.session_state.stop_id)
@@ -155,10 +164,14 @@ if st.session_state.stage == 'delay':
     else:
         st.markdown(f"### Verspätungen an {st.session_state.stop_name}")
         for d in delays[:10]:
-            sched = d['scheduled'].astimezone().strftime('%H:%M')
-            pred = d['predicted'].astimezone().strftime('%H:%M')
-            diff = f"(+{d['delay_min']} min)" if d['delay_min'] else '(planmäßig)'
-            st.write(f"• Linie **{d['route_id']}** ({d['trip_id']}): {sched} → {pred} {diff}")
+            raw = d['route_id'].split(':')[1] if ':' in d['route_id'] else d['route_id']
+            m = re.match(r"(\d+)([A-Za-z].*)", raw)
+            line = f"{m.group(1)} {m.group(2)}" if m else raw
+            head = d['headsign']
+            sched_str = d['scheduled'].astimezone(LOCAL_TZ).strftime('%H:%M')
+            pred_str = d['predicted'].astimezone(LOCAL_TZ).strftime('%H:%M')
+            diff = f"(+{d['delay_min']} min)" if d['delay_min'] else '(planmässig)'
+            st.write(f"• Linie **{line}** Richtung **{head}**: {sched_str} Uhr → {pred_str} Uhr {diff}")
     st.session_state.stage = 'done'
 
 # Stage: done -> Restart
@@ -166,9 +179,8 @@ if st.session_state.stage == 'done':
     if st.button('Neue Abfrage starten'):
         st.session_state.stage = 'chat'
         st.session_state.messages = [
-            {'role': 'system', 'content': 'Du bist ein freundlicher Chatbot für ÖV-Verspätungen.'},
-            {'role': 'assistant', 'content': 'Welche Haltestelle möchtest du abfragen?'}
+            {'role':'assistant','content':'Welche Haltestelle möchtest du abfragen?'}
         ]
         st.session_state.stop_id = None
         st.session_state.stop_name = None
-        st.experimental_rerun()
+        st.rerun()
