@@ -69,7 +69,6 @@ def stop_place_lookup(ort_name: str):
 
 # ------------------------- 3) GTFS-RT Fetch & Parser -------------------------
 def fetch_gtfs_rt(api_key: str) -> gtfs_realtime_pb2.FeedMessage:
-    """Lädt GTFS-Realtime-Feed herunter und gibt FeedMessage zurück."""
     url = "https://api.opentransportdata.swiss/la/gtfs-rt"
     headers = {"Authorization": f"Bearer {api_key}", "User-Agent": "streamlit-delay-bot/1.0", "Accept": "application/octet-stream"}
     resp = requests.get(url, headers=headers)
@@ -80,9 +79,11 @@ def fetch_gtfs_rt(api_key: str) -> gtfs_realtime_pb2.FeedMessage:
     feed.ParseFromString(resp.content)
     return feed
 
+# Angepasster Parser: nur Departure & echte Verspätungen, mit Sekunden-Auflösung
 
 def parse_delays_for_stop(feed: gtfs_realtime_pb2.FeedMessage, stop_id: str):
-    """Extrahiert StopTimeUpdates für eine stop_id und liefert sortierte Liste mit Kopfziel (headsign)."""
+    """Extrahiert nur Departure-Updates mit delay>0 für eine stop_id und zukünftige Ereignisse."""
+    now_utc = datetime.now(timezone.utc)
     delays = []
     for entity in feed.entity:
         if not entity.HasField('trip_update'):
@@ -92,18 +93,28 @@ def parse_delays_for_stop(feed: gtfs_realtime_pb2.FeedMessage, stop_id: str):
         for stu in tu.stop_time_update:
             if stu.stop_id != stop_id:
                 continue
-            event = stu.arrival if stu.HasField('arrival') and stu.arrival.time else stu.departure if stu.HasField('departure') and stu.departure.time else None
-            if not event:
+            # Nur echte Departure-Events
+            if not stu.HasField('departure') or not stu.departure.time:
                 continue
-            delay_s = event.delay or 0
-            pred_dt = datetime.fromtimestamp(event.time, timezone.utc)
+            ev = stu.departure
+            pred_dt = datetime.fromtimestamp(ev.time, timezone.utc)
+            # Nur zukünftige Abfahrten
+            if pred_dt < now_utc:
+                continue
+            # Verzögerung in Sekunden (prüfen, ob Feld gesetzt)
+            if not ev.HasField('delay'):
+                continue
+            delay_s = ev.delay
+            # Nur Verzögerung > 0
+            if delay_s <= 0:
+                continue
             sched_dt = pred_dt - timedelta(seconds=delay_s)
             delays.append({
-                'route_id': tu.trip.route_id,
-                'headsign': headsign,
+                'route_id':  tu.trip.route_id,
+                'headsign':  headsign,
                 'scheduled': sched_dt,
                 'predicted': pred_dt,
-                'delay_min': delay_s // 60
+                'delay_s':   delay_s
             })
     return sorted(delays, key=lambda x: x['scheduled'])
 
@@ -155,23 +166,31 @@ if st.session_state.stage == 'lookup':
 
 # Stage: delay -> fetch & display
 if st.session_state.stage == 'delay':
-    st.session_state.messages.append({'role':'assistant','content':'Hole Verspätungsdaten...'})
-    st.chat_message('assistant').write('Hole Verspätungsdaten...')
-    feed = fetch_gtfs_rt(GTFS_RT_API_KEY)
+    feed   = fetch_gtfs_rt(GTFS_RT_API_KEY)
     delays = parse_delays_for_stop(feed, st.session_state.stop_id)
+
+    # Nur echte Verschiebungen anzeigen:
+    delays = [d for d in delays if d['scheduled'] != d['predicted']]
+
     if not delays:
-        st.info('Keine Verspätungsdaten für diese Haltestelle gefunden.')
+        st.info('Keine Verspätungsdaten mit Verzögerung für diese Haltestelle gefunden.')
     else:
         st.markdown(f"### Verspätungen an {st.session_state.stop_name}")
         for d in delays[:10]:
-            raw = d['route_id'].split(':')[1] if ':' in d['route_id'] else d['route_id']
-            m = re.match(r"(\d+)([A-Za-z].*)", raw)
+            raw  = d['route_id'].split(':')[1] if ':' in d['route_id'] else d['route_id']
+            m    = re.match(r"(\d+)([A-Za-z].*)", raw)
             line = f"{m.group(1)} {m.group(2)}" if m else raw
             head = d['headsign']
-            sched_str = d['scheduled'].astimezone(LOCAL_TZ).strftime('%H:%M')
-            pred_str = d['predicted'].astimezone(LOCAL_TZ).strftime('%H:%M')
-            diff = f"(+{d['delay_min']} min)" if d['delay_min'] else '(planmässig)'
-            st.write(f"• Linie **{line}** Richtung **{head}**: {sched_str} Uhr → {pred_str} Uhr {diff}")
+            sched = d['scheduled'].astimezone(LOCAL_TZ).strftime('%H:%M')
+            pred  = d['predicted'].astimezone(LOCAL_TZ).strftime('%H:%M')
+            delay_s = d['delay_s']
+            if delay_s < 60:
+                diff = f"(+{delay_s} s)"
+            else:
+                diff = f"(+{delay_s//60} min)"
+
+
+            st.write(f"• Linie **{line}** Richtung **{head}**: {sched} Uhr → {pred} Uhr {diff}")
     st.session_state.stage = 'done'
 
 # Stage: done -> Restart
