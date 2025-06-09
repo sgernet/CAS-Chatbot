@@ -18,7 +18,7 @@ with st.form("profil_formular"):
     st.caption("🔒 Mindestens 6 Zeichen")
 
     # 5–7: Adresse
-    strasse = st.text_input("Straße und Hausnummer")
+    strasse = st.text_input("Strasse und Hausnummer")
     plz = st.number_input("Postleitzahl", min_value=0, step=1)
     ort = st.text_input("Ort", max_chars=50)
 
@@ -27,19 +27,19 @@ with st.form("profil_formular"):
     wenig_umsteigen = st.checkbox("Route mit möglichst wenigen Umstiegen")
     schnell_umsteigen = st.checkbox("Schnelles Umsteigen ist möglich")
     eigenes_velo = st.checkbox("Ich nutze mein eigenes Velo")
-    leihvelo = st.checkbox("Ich bin an Leihvelos interessiert")
+    leihvelo = st.checkbox("Ich nutze Leihvelos")
     escooter = st.checkbox("Ich nutze E-Scooter")
     eigenes_auto = st.checkbox("Ich nutze mein eigenes Auto")
-    carsharing = st.checkbox("Ich bin an Carsharing interessiert")
+    carsharing = st.checkbox("Ich nutze Carsharing")
 
     # 16: Dialogform
-    dialogform = st.text_area("Dialogform / Gesprächsmodus*", placeholder="z. B. 'Kurz und knapp', 'Locker erklärt'")
+    dialogform = st.selectbox("Dialogform / Gesprächsmodus*", options=["Text/Schrift", "Sprache/Audio"])
 
     # 17: Wetter
     wetter = st.checkbox("Ja, ich möchte wetterabhängige Routenvorschläge")
 
     # 18: Reisetyp
-    reisetyp = st.text_area("Reisetyp*", placeholder="z. B. 'Pendler', 'Freizeit', 'Einkauf'")
+    reisetyp = st.selectbox("Reisetyp*", options=["Pendler", "Freizeit"])
 
     submitted = st.form_submit_button("💾 Profil speichern")
 
