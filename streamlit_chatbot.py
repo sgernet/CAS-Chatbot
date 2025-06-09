@@ -226,8 +226,9 @@ if "messages" not in st.session_state:
                 "Führe einen natürlichen und lockeren Dialog per Du. Stelle gezielte Rückfragen, wenn etwas fehlt. "
                 "Sobald du alle Infos hast, gib **ausschließlich** ein JSON-Objekt aus:\n"
                 "{\"start\":\"…\", \"ziel\":\"…\", \"datum\":\"YYYY-MM-DD\", \"uhrzeit\":\"HH:MM:SS\", \"typ\":\"abfahrt\"}\n"
-               "Direkt nachdem die Verbindungen angezeigt wurden, frage den Nutzer, ob alles klar ist, ob er die Reise durchführt "
-                "und welche Verbindung er wählen wird. "
+                "Nach dem Stage Trip werden die Verbindungen angezeigt. Du gibst jetzt kein JSON mehr aus. "
+                "Jetzt sage dem Nutzer, dass du ihn gerne auf seiner Reise begleiten wirst."
+                "Frage den Nutzer dazu, ob alles klar ist, ob er die Reise durchführt, und welche Verbindung er wählen wird.  "
                 "Beende das Gespräch und wünsche ihm eine gute Reise. Sei kreativ und überraschend."
             )
         },
@@ -269,8 +270,9 @@ if st.session_state.stage in ["chat", "done"]:
         st.session_state.user_input = user_input
         # 1) Datumsausdrücke ersetzen
         cleaned = replace_date_keywords(user_input)
-        if cleaned != user_input:
-            st.info(f"ℹ️ Datums­auss­druck ersetzt:\n  {user_input!r}\n→ {cleaned!r}")
+        # Hinweis nur noch intern, nicht für den User:
+        #if cleaned != user_input:
+            #st.info(f"ℹ️ Datums­auss­druck ersetzt:\n  {user_input!r}\n→ {cleaned!r}")
 
         # 2) Nachricht in History speichern
         st.session_state.messages.append({"role": "user", "content": cleaned})
@@ -550,11 +552,21 @@ if st.session_state.stage == "trip":
     else:
         st.info("Keine Alternativen verfügbar.")
 
+
+    ##################hier
+    response = openai.chat.completions.create(
+        model="gpt-4o",                    
+        messages=st.session_state.messages
+    )
+    bot_reply = response.choices[0].message.content.strip()
+
+    # 4) Speichere und zeige die Antwort an
     st.session_state.messages.append({
-        "role": "assistant",
-        "content": "Alles klar? Führst du die Reise wirklich durch und welche Verbindung wirst du wählen?"
+        "role":"assistant",
+        "content": bot_reply
     })
-    st.chat_message("assistant").write("Alles klar? Führst du die Reise wirklich durch und welche Verbindung wirst du wählen?")
+    st.chat_message("assistant").write(bot_reply)
+
 
     user_choice = st.chat_input("🧳 Deine Antwort:")
     if user_choice:
@@ -618,7 +630,18 @@ if st.session_state.stage == "done":
     st.markdown("## Karte zum Reiseweg")
     show_reiseweg(st.session_state.xml_response)
 
-     # ← Hier die Abschlussnachricht ganz unten
-    st.chat_message("assistant").write(
-        "Alles klar, danke für deine Rückmeldung! Ich wünsche dir eine gute Reise 🚆🙂"
+    # ––– freie Abschlussnachricht –––
+
+    response = openai.chat.completions.create(
+        model="gpt-4o",                            
+        messages=st.session_state.messages        # enthält jetzt auch die letzte User-Antwort
     )
+    final_reply = response.choices[0].message.content.strip()
+
+    # Antwort speichern und ausgeben
+    st.session_state.messages.append({
+        "role": "assistant",
+        "content": final_reply
+    })
+    st.chat_message("assistant").write(final_reply)
+
