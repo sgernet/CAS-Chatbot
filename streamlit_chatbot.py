@@ -232,10 +232,7 @@ if "messages" not in st.session_state:
                 "Beende das Gespräch und wünsche ihm eine gute Reise. Sei kreativ und überraschend."
             )
         },
-        {
-            "role": "assistant",
-            "content": "Wohin möchtest du reisen und wann?"
-        }
+
     ]
     st.session_state.reiseinfos = None        # Wird gesetzt, sobald JSON erkannt wurde
     st.session_state.steps_best = None         # Schritte der besten Verbindung
@@ -249,6 +246,26 @@ st.title("🚆 ÖV-Chatbot Schweiz")
 st.write("Sage mir deinen Reisewunsch und ich suche im Fahrplan die passende Verbindung für dich. ")
 st.write("Bsp.: „Ich möchte morgen um 10 Uhr von Luzern nach Engelberg fahren.“")
 st.write("---")
+
+# Wenn wir gerade in Stage "chat" sind und noch keine Assistant-Nachricht da ist:
+if st.session_state.stage == "chat" and len(st.session_state.messages) == 1:
+    # 1) GPT aufrufen mit nur der System-Instruction
+    response = openai.chat.completions.create(
+        model="gpt-4o",
+        messages=st.session_state.messages
+    )
+    first_question = response.choices[0].message.content.strip()
+    
+    # 2) In die History übernehmen
+    st.session_state.messages.append({
+        "role": "assistant",
+        "content": first_question
+    })
+    
+    # 3) Seite neu laden, um das Feld mit der neuen Frage anzuzeigen
+    st.rerun()
+
+
 
 # ===============================================================
 #  >>> CHAT-HISTORIE ANZEIGEN <<<
@@ -553,7 +570,6 @@ if st.session_state.stage == "trip":
         st.info("Keine Alternativen verfügbar.")
 
 
-    ##################hier
     response = openai.chat.completions.create(
         model="gpt-4o",                    
         messages=st.session_state.messages
