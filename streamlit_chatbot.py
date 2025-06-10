@@ -115,7 +115,7 @@ def stop_place_lookup(ort_name: str):
         return None
 
     ns = {'ojp': 'http://www.vdv.de/ojp', 's': 'http://www.siri.org.uk/siri'}
-    tree = ET.fromstring(resp.text)
+    tree = ET.fromstring(resp.content)
     results = []
     for sp in tree.findall('.//ojp:StopPlace', ns):
         ref  = sp.findtext('.//ojp:StopPlaceRef', namespaces=ns)
@@ -491,16 +491,16 @@ if st.session_state.stage == "trip":
         st.error(f"❌ Fehler bei der Trip-Anfrage: {response.status_code}")
         st.stop()
 
-    best, alts = parse_trips(response.text)
+    best, alts = parse_trips(response.content)
     st.session_state.steps_best = best
     st.session_state.steps_alts = alts
 
     # ───────────────────────────────────────────────────────────────────
     # Neu: XML-Antwort im Session-State speichern
-    st.session_state.xml_response = response.text
+    st.session_state.xml_response = response.content.decode('utf-8')
     # ───────────────────────────────────────────────────────────────────
 
-    best, alts = parse_trips(response.text)
+    best, alts = parse_trips(response.content)
     st.session_state.steps_best = best
     st.session_state.steps_alts = alts
 
