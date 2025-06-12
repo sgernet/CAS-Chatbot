@@ -175,17 +175,22 @@ def parse_trips(xml_text: str):
                     'dep_quay': get_text(board, 'ojp:PlannedQuay/ojp:Text', ns) or '–',
                     'arr_sta':  alight.find('.//ojp:StopPointName/ojp:Text', ns).text,
                     'arr_time': alight.find('.//ojp:TimetabledTime', ns).text.split('T')[-1].rstrip('Z'),
-                    'arr_quay': get_text(board, 'ojp:PlannedQuay/ojp:Text', ns) or '–',
+                    'arr_quay': get_text(alight, 'ojp:PlannedQuay/ojp:Text', ns) or '–',
                 })
             else:
                 trf = leg.find('ojp:TransferLeg', ns)
                 if trf is not None:
+                    # Dauer aus ISO-8601 („PT10M“ → „10M“) holen, zu Kleinbuchstaben,
+                    # dann „10m“ per Regex in „10 min“ umwandeln
+                    raw_dur = trf.find('ojp:Duration', ns).text.lstrip('PT')
+                    dur = raw_dur.lower()
+                    dur = re.sub(r'(\d+)m', r'\1 min', dur)
                     steps.append({
                         'type':     'walk',
                         'mode':     trf.find('.//ojp:TransferMode', ns).text,
                         'from':     trf.find('.//ojp:LegStart/ojp:LocationName/ojp:Text', ns).text,
                         'to':       trf.find('.//ojp:LegEnd/ojp:LocationName/ojp:Text', ns).text,
-                        'duration': trf.find('ojp:Duration', ns).text.lstrip('PT').lower()
+                        'duration': dur
                     })
         return steps
 
