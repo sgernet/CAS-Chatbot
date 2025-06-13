@@ -4,8 +4,38 @@ import xml.etree.ElementTree as ET
 from google.transit import gtfs_realtime_pb2
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
-import re
+import csv
 import streamlit as st
+
+# ------------------- 0) Routen­mapping aus routes.txt laden (robust) -------------------
+import os, csv
+
+ROUTES_PATH = os.path.join(os.path.dirname(__file__), 'routes.txt')
+route_map: dict[str, dict[str,str]] = {}
+
+with open(ROUTES_PATH, newline='', encoding='utf-8-sig') as csvfile:
+    reader = csv.DictReader(csvfile)
+    # 1) normalize header names
+    if reader.fieldnames:
+        reader.fieldnames = [fn.strip() for fn in reader.fieldnames]
+
+    for row in reader:
+        # 2) finde das "route_id"-Feld case‐insensitive
+        key = next((k for k in row if k.strip().lower() == 'route_id'), None)
+        if not key:
+            continue
+        rid = row[key].strip()
+        if not rid:
+            continue
+
+        # 3) short bzw. long name
+        short = row.get('route_short_name', '').strip()
+        longn = row.get('route_long_name', '').strip()
+        route_map[rid] = {
+            'short': short or '',
+            'long':  longn  or ''
+        }    
+
 
 # ------------------------- 1) API-Keys aus secrets laden -------------------------
 GTFS_RT_API_KEY = st.secrets.get("GTFS_RT_API_KEY")
@@ -70,7 +100,9 @@ def stop_place_lookup(ort_name: str):
 # ------------------------- 3) GTFS-RT Fetch & Parser -------------------------
 def fetch_gtfs_rt(api_key: str) -> gtfs_realtime_pb2.FeedMessage:
     url = "https://api.opentransportdata.swiss/la/gtfs-rt"
-    headers = {"Authorization": f"Bearer {api_key}", "User-Agent": "streamlit-delay-bot/1.0", "Accept": "application/octet-stream"}
+    headers = {"Authorization": f"Bearer {api_key}",
+               "User-Agent": "streamlit-delay-bot/1.0",
+               "Accept": "application/octet-stream"}
     resp = requests.get(url, headers=headers)
     if resp.status_code != 200:
         st.error(f"❌ GTFS-RT Abruf fehlgeschlagen: {resp.status_code}")
@@ -78,8 +110,6 @@ def fetch_gtfs_rt(api_key: str) -> gtfs_realtime_pb2.FeedMessage:
     feed = gtfs_realtime_pb2.FeedMessage()
     feed.ParseFromString(resp.content)
     return feed
-
-# Angepasster Parser: nur Departure & echte Verspätungen, mit Sekunden-Auflösung
 
 def parse_delays_for_stop(feed: gtfs_realtime_pb2.FeedMessage, stop_id: str):
     """Extrahiert nur Departure-Updates mit delay>0 für eine stop_id und zukünftige Ereignisse."""
@@ -93,28 +123,19 @@ def parse_delays_for_stop(feed: gtfs_realtime_pb2.FeedMessage, stop_id: str):
         for stu in tu.stop_time_update:
             if stu.stop_id != stop_id:
                 continue
-            # Nur echte Departure-Events
             if not stu.HasField('departure') or not stu.departure.time:
                 continue
             ev = stu.departure
             pred_dt = datetime.fromtimestamp(ev.time, timezone.utc)
-            # Nur zukünftige Abfahrten
-            if pred_dt < now_utc:
+            if pred_dt < now_utc or not ev.HasField('delay') or ev.delay <= 0:
                 continue
-            # Verzögerung in Sekunden (prüfen, ob Feld gesetzt)
-            if not ev.HasField('delay'):
-                continue
-            delay_s = ev.delay
-            # Nur Verzögerung > 0
-            if delay_s <= 0:
-                continue
-            sched_dt = pred_dt - timedelta(seconds=delay_s)
+            sched_dt = pred_dt - timedelta(seconds=ev.delay)
             delays.append({
                 'route_id':  tu.trip.route_id,
                 'headsign':  headsign,
                 'scheduled': sched_dt,
                 'predicted': pred_dt,
-                'delay_s':   delay_s
+                'delay_s':   ev.delay
             })
     return sorted(delays, key=lambda x: x['scheduled'])
 
@@ -132,7 +153,7 @@ st.title('🚦 ÖV-Chatbot für Verspätungen')
 st.write('Frag mich nach aktuellen Verspätungen an deiner Haltestelle.')
 st.write('---')
 
-# Chat-Historie (Systemnachrichten ausgeblendet)
+# Chat-Historie
 for msg in st.session_state.messages:
     if msg['role'] == 'system':
         continue
@@ -168,8 +189,6 @@ if st.session_state.stage == 'lookup':
 if st.session_state.stage == 'delay':
     feed   = fetch_gtfs_rt(GTFS_RT_API_KEY)
     delays = parse_delays_for_stop(feed, st.session_state.stop_id)
-
-    # Nur echte Verschiebungen anzeigen:
     delays = [d for d in delays if d['scheduled'] != d['predicted']]
 
     if not delays:
@@ -177,18 +196,24 @@ if st.session_state.stage == 'delay':
     else:
         st.markdown(f"### Verspätungen an {st.session_state.stop_name}")
         for d in delays[:10]:
-            raw  = d['route_id'].split(':')[1] if ':' in d['route_id'] else d['route_id']
-            m    = re.match(r"(\d+)([A-Za-z].*)", raw)
-            line = f"{m.group(1)} {m.group(2)}" if m else raw
-            head = d['headsign']
+            # Ursprüngliche route_id evtl. im Format 'prefix:ID'
+            raw_id = d['route_id'].split(':', 1)[1] if ':' in d['route_id'] else d['route_id']
+            # aus routes.txt holen, fallback auf raw_id
+            info = route_map.get(raw_id, {'short': raw_id, 'long': ''})
+            s = info['short']
+            l = info['long']
+            if s and l:
+                line = f"{s} ({l})"
+            elif s:
+                line = s
+            else:
+                line = l or raw_id
+
+            head  = d['headsign']
             sched = d['scheduled'].astimezone(LOCAL_TZ).strftime('%H:%M')
             pred  = d['predicted'].astimezone(LOCAL_TZ).strftime('%H:%M')
-            delay_s = d['delay_s']
-            if delay_s < 60:
-                diff = f"(+{delay_s} s)"
-            else:
-                diff = f"(+{delay_s//60} min)"
-
+            ds    = d['delay_s']
+            diff  = f"(+{ds}s)" if ds < 60 else f"(+{ds//60} min)"
 
             st.write(f"• Linie **{line}** Richtung **{head}**: {sched} Uhr → {pred} Uhr {diff}")
     st.session_state.stage = 'done'
