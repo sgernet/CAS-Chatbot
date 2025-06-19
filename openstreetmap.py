@@ -1,3 +1,5 @@
+# openstreetmap.py
+
 import streamlit as st
 from geopy.geocoders import Nominatim
 import requests
@@ -6,7 +8,7 @@ import certifi
 import pandas as pd
 import folium
 from folium.features import DivIcon
-import streamlit.components.v1 as components
+from streamlit_folium import st_folium
 
 # --- Seite konfigurieren ---
 st.set_page_config(page_title="Einkaufsmöglichkeiten finden", layout="wide")
@@ -81,7 +83,7 @@ if "shops_df" in st.session_state:
     lon  = data["lon"]
 
     # Filter nach Shop-Typ (immer sichtbar)
-    shop_types    = sorted(df["Typ"].unique())
+    shop_types     = sorted(df["Typ"].unique())
     selected_types = st.multiselect(
         "Shop-Typen filtern",
         shop_types,
@@ -136,9 +138,8 @@ if "shops_df" in st.session_state:
                 )
             ).add_to(m)
 
-        # Karte in Streamlit einbetten
-        map_html = m._repr_html_()
-        components.html(map_html, height=500, width=700)
+        # Karte in Streamlit einbetten mit vollem Leaflet-Support
+        st_folium(m, width=700, height=500)
 
         # Tabelle mit Details
         st.dataframe(df_filtered[["Nr", "Name", "Typ"]])
@@ -150,3 +151,4 @@ st.info(
     "Die Daten können unvollständig oder veraltet sein. "
     "Bitte beachte die [Nutzungsbedingungen](https://www.openstreetmap.org/copyright)."
 )
+# --- Ende der App ---
