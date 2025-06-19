@@ -25,7 +25,7 @@ def get_coordinates(address: str):
     return (loc.latitude, loc.longitude) if loc else (None, None)
 
 @st.cache_data
-def get_shops(lat: float, lon: float, radius: int = 1000) -> pd.DataFrame:
+def get_shops(lat: float, lon: float, radius: int = 500) -> pd.DataFrame:
     """Fragt Overpass API ab und liefert DataFrame mit Name, Typ, lat, lon, Nr."""
     overpass_url = "http://overpass-api.de/api/interpreter"
     query = f"""
@@ -145,9 +145,8 @@ if "shops_df" in st.session_state:
 
 # --- Installationshinweis ---
 st.markdown("---")
-st.markdown(
-    "**Installieren:**\n"
-    "`pip install streamlit geopy requests pandas certifi folium streamlit-folium`\n\n"
-    "**Starten:**\n"
-    "`streamlit run openstreetmap.py`"
+st.info(
+    "Diese App nutzt die OpenStreetMap-Datenbank und die Overpass API. "
+    "Die Daten können unvollständig oder veraltet sein. "
+    "Bitte beachte die [Nutzungsbedingungen](https://www.openstreetmap.org/copyright)."
 )
