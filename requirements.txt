@@ -5,3 +5,8 @@ requests
 dateparser
 gtfs-realtime-bindings
 protobuf
+geopy
+pandas
+certifi
+folium
+streamlit-folium
