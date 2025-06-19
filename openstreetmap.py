@@ -25,7 +25,7 @@ def get_coordinates(address: str):
     return (loc.latitude, loc.longitude) if loc else (None, None)
 
 @st.cache_data
-def get_shops(lat: float, lon: float, radius: int = 500) -> pd.DataFrame:
+def get_shops(lat: float, lon: float, radius: int = 1000) -> pd.DataFrame:
     """Fragt Overpass API ab und liefert DataFrame mit Name, Typ, lat, lon, Nr."""
     overpass_url = "http://overpass-api.de/api/interpreter"
     query = f"""
@@ -57,7 +57,7 @@ def get_shops(lat: float, lon: float, radius: int = 500) -> pd.DataFrame:
 # --- Eingaben ---
 st.title("🔍 Einkaufsmöglichkeiten finden")
 address = st.text_input("Adresse oder Ort eingeben")
-radius  = st.slider("Radius um Adresse (in Metern)", 100, 5000, 1000, step=100)
+radius  = st.slider("Radius um Adresse (in Metern)", 100, 2000, 500, step=50)
 
 # 1) Suche ausführen und Ergebnis cachen
 if st.button("Suchen"):
